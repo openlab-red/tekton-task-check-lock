@@ -1,0 +1,95 @@
+---
+# Tekton Task for checking concurrent pipeline runs
+# Prevents race conditions by detecting if another PipelineRun for the same
+# repository is already in progress, and skipping gracefully if so.
+#
+# Usage with git resolver:
+#   taskRef:
+#     resolver: git
+#     params:
+#       - name: url
+#         value: https://github.com/openlab-red/tekton-task-check-lock.git
+#       - name: revision
+#         value: main
+#       - name: pathInRepo
+#         value: task/check-lock.yaml
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: check-lock
+  labels:
+    app.kubernetes.io/name: check-lock
+    app.kubernetes.io/component: task
+    app.kubernetes.io/part-of: tekton-tasks
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.50.0"
+    tekton.dev/categories: Build
+    tekton.dev/tags: concurrency,lock,pipeline
+    tekton.dev/displayName: "check-lock"
+    tekton.dev/platforms: "linux/amd64,linux/arm64"
+spec:
+  description: >-
+    Checks for concurrent PipelineRuns on the same repository. If another run
+    is already in progress, logs a message and exits gracefully (skip).
+    Prevents race conditions in release pipelines.
+
+  params:
+    - name: repo-url
+      type: string
+      description: Repository URL to match against other PipelineRuns
+
+    - name: pipeline-name
+      type: string
+      description: Pipeline name to filter PipelineRuns
+
+    - name: fail-on-conflict
+      type: string
+      default: "false"
+      description: If true, fail when concurrent run detected. If false, exit 0 (skip gracefully)
+
+    - name: image
+      type: string
+      default: "quay.io/openlab-red/ci-tools:latest"
+      description: Image with oc/kubectl and jq CLI
+
+  steps:
+    - name: check-lock
+      image: $(params.image)
+      script: |
+        #!/bin/sh
+        set -e
+
+        REPO_URL="$(params.repo-url)"
+        PIPELINE_NAME="$(params.pipeline-name)"
+        CURRENT_RUN="${PIPELINERUN_NAME}"
+
+        echo "[lock] Current PipelineRun: ${CURRENT_RUN}"
+        echo "[lock] Repository: ${REPO_URL}"
+        echo "[lock] Checking for concurrent runs of ${PIPELINE_NAME}..."
+
+        # Get all running PipelineRuns for same pipeline, filter by repo-url param, exclude current
+        RUNNING=$(oc get pipelineruns \
+          -l "tekton.dev/pipeline=${PIPELINE_NAME}" \
+          -o json | jq -r --arg current "$CURRENT_RUN" --arg repo "$REPO_URL" '
+          .items[]
+          | select(.status.conditions[0].reason == "Running")
+          | select(.metadata.name != $current)
+          | select(.spec.params[] | select(.name == "repo-url") | .value == $repo)
+          | .metadata.name' \
+          | head -1)
+
+        if [ -n "$RUNNING" ]; then
+          echo "[lock] Another run is already in progress: ${RUNNING}"
+          echo "[lock] Skipping this run to avoid conflicts"
+          if [ "$(params.fail-on-conflict)" = "true" ]; then
+            exit 1
+          fi
+          exit 0
+        fi
+
+        echo "[lock] No concurrent runs detected, proceeding..."
+      env:
+        - name: PIPELINERUN_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['tekton.dev/pipelineRun']
