@@ -52,6 +52,11 @@ spec:
       default: "quay.io/openlab-red/ci-tools:latest"
       description: Image with oc/kubectl and jq CLI
 
+  stepTemplate:
+    env:
+      - name: HOME
+        value: /tekton/home
+
   steps:
     - name: check-lock
       image: $(params.image)
