@@ -55,7 +55,14 @@ spec:
   stepTemplate:
     env:
       - name: HOME
-        value: /tekton/home
+        value: /home/tekton
+    volumeMounts:
+      - name: home-dir
+        mountPath: /home/tekton
+
+  volumes:
+    - name: home-dir
+      emptyDir: {}
 
   steps:
     - name: check-lock
