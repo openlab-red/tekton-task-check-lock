@@ -1,0 +1,19 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: tekton-task-check-lock
+  description: Tekton Task for checking if a lock exists to prevent concurrent runs
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+  links:
+    - url: https://azuredevops.alinma.internal/DevSecOps/tekton-tasks/_git/tekton-task-check-lock
+      title: Azure DevOps
+  tags:
+    - tekton
+    - task
+    - locking
+spec:
+  type: library
+  lifecycle: production
+  owner: platform-team
+  system: alinma-platform

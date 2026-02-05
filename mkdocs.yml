@@ -1,0 +1,5 @@
+site_name: Check Lock Task
+nav:
+  - Home: index.md
+plugins:
+  - techdocs-core
